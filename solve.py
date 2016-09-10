@@ -1,3 +1,9 @@
+### global var ###
+outputCarCount = 0
+rejectCarCount = 0
+escapeCarCount = 0
+##################
+
 class Node:
   def __init__(self):
     self.upEdge = None
@@ -12,6 +18,7 @@ class Node:
     self.downPr = None
     self.rightPr = None
     self.isRightEnd = False
+    self.isLeftEnd = False
     self.isUpEnd = False
     self.isDownEnd = False
     self.dis = None
@@ -65,8 +72,10 @@ class Edge:
     self.isVertical = False
     self.dis = 1 # default
   def moveCar(self, num, up = False):
+    global outputCarCount, rejectCarCount, escapeCarCount
     outLen = 0
     moveNode = None
+    fromQueue = None
     if self.isHorizontal:
       if self.rightQueueLen < num:
         outLen = self.rightQueueLen
@@ -93,27 +102,73 @@ class Edge:
       moveNode = self.downNode
     
     if moveNode.isRightEnd:
-      return outLen
+      outputCarCount += outLen
     
     moveNode.calPr()
     leftover = outLen
-    if moveNode.upPr != None:
-      moveNode.upEdge.upQueueLen += int(outLen * moveNode.upPr)
-      leftover -= int(outLen * moveNode.upPr)
-    if moveNode.downPr != None:
-      moveNode.downEdge.downQueueLen += int(outLen * moveNode.downPr)
-      leftover -= int(outLen * moveNode.downPr)
-    if moveNode.rightPr != None:
-      moveNode.rightEdge.rightQueueLen += int(outLen * moveNode.rightPr)
-      leftover -= int(outLen * moveNode.rightPr)
+    total = 0
+    if self.isHorizontal:
+      if moveNode.upPr != None and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+        moveNode.upEdge.upQueueLen += int(min(outLen * moveNode.upPr, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
+        leftover -= int(min(outLen * moveNode.upPr, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
+      if moveNode.downPr != None and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+        moveNode.downEdge.downQueueLen += int(min(outLen * moveNode.downPr, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
+        leftover -= int(min(outLen * moveNode.downPr, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
+      if moveNode.rightPr != None and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        moveNode.rightEdge.rightQueueLen += int(min(outLen * moveNode.rightPr, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+        leftover -= int(min(outLen * moveNode.rightPr, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+    elif up == True:
+      total += moveNode.upPr if moveNode.upPr != None else 0
+      total += moveNode.rightPr if moveNode.rightPr != None else 0      
+      if moveNode.upPr != None and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+        moveNode.upEdge.upQueueLen += int(min(outLen * moveNode.upPr / total, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
+        leftover -= int(min(outLen * moveNode.upPr / total, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
+      if moveNode.rightPr != None and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        moveNode.rightEdge.rightQueueLen += int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+        leftover -= int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+    else:
+      total += moveNode.downPr if moveNode.downPr != None else 0
+      total += moveNode.rightPr if moveNode.rightPr != None else 0 
+      if moveNode.downPr != None and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+        moveNode.downEdge.downQueueLen += int(min(outLen * moveNode.downPr/ total, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
+        leftover -= int(min(outLen * moveNode.downPr/ total, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
+      if moveNode.rightPr != None and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        moveNode.rightEdge.rightQueueLen += int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+        leftover -= int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+
 
     if leftover > 0: # TO MODIFY
-      if moveNode.upEdge:
-        moveNode.upEdge.upQueueLen += leftover
-      elif moveNode.downEdge:
-        moveNode.downEdge.downQueueLen += leftover
-      elif moveNode.rightEdge:
-        moveNode.rightEdge.rightQueueLen += leftover
+      if moveNode.rightEdge and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        moveNode.rightEdge.rightQueueLen += min(leftover, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen)
+        leftover -= min(leftover, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen)
+      if moveNode.upEdge and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+        moveNode.upEdge.upQueueLen += min(leftover, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen)
+        leftover -= min(leftover, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen)
+      if moveNode.downEdge and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+        moveNode.downEdge.downQueueLen += min(leftover, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen)
+        leftover -= min(leftover, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen)
+
+    if leftover > 0:
+      if moveNode.isRightEnd:
+        print 'moveNode.isRightEnd:', moveNode.isRightEnd, leftover
+        return
+      if moveNode.isLeftEnd:
+        print 'moveNode.isLeftEnd:', moveNode.isLeftEnd, leftover
+        rejectCarCount += leftover
+      elif moveNode.isUpEnd:
+        print 'moveNode.isUpEnd:', moveNode.isUpEnd, leftover
+        escapeCarCount += leftover
+      elif moveNode.isDownEnd:
+        print 'moveNode.isDownEnd:', moveNode.isDownEnd, leftover
+        escapeCarCount += leftover
+      else:
+        if self.isHorizontal:
+          self.rightQueueLen += leftover
+        elif up:
+          self.upQueueLen += leftover
+        else:
+          self.downQueueLen += leftover
+        print 'moveNode.!!!', leftover
 
 class Graph:
   def __init__(self, matrix):
@@ -121,7 +176,6 @@ class Graph:
     self.fixMatrix =None
     self.nodes = None
     self.inputEdges = None
-    self.outputCarCount = 0
     self.construct()
   def construct(self):
     self._construct(self.matrix)
@@ -138,6 +192,8 @@ class Graph:
         nodes[i][j] = Node()
         if j == w-1:
           nodes[i][j].isRightEnd = True
+        if j == 0:
+          nodes[i][j].isLeftEnd = True
         if i == 0:
           nodes[i][j].isUpEnd = True
         if i == h-1:
@@ -157,7 +213,7 @@ class Graph:
           upEdge.rightNode = nodes[i][j+1]
           nodes[i][j+1].leftEdge = upEdge
           upEdge.leftNode = nodes[i][j]
-          
+
           nodes[i][j].downEdge = leftEdge
           leftEdge.downNode = nodes[i+1][j]
           nodes[i+1][j].upEdge = leftEdge
@@ -241,14 +297,23 @@ class Graph:
           last = i
       if first != -1:
         for k in range(first):
-          if self.nodes[k][j+1].downEdge:
+          if j+1 < w-1 and k < h-1 and self.matrix[k][j+1] == 1 and self.nodes[k][j+1].downEdge:
             self.nodes[k][j+1].downEdge.downNode = None
             self.nodes[k][j+1].downEdge = None
+          if j-1 > 0 and j-1 < w-1 and k < h-1 and self.matrix[k][j-1] == 1 and self.nodes[k+1][j].upEdge:
+            self.nodes[k+1][j].upEdge.upNode = None
+            self.nodes[k+1][j].upEdge = None
+
       if last != -1:
         for k in range(last+1,h):
-          if self.nodes[k][j+1].upEdge:
-            self.nodes[k][j+1].upEdge.upNode = None
-            self.nodes[k][j+1].upEdge = None
+          if k == 4 and j == 2:
+            print k, j
+          if j+1 < w-1 and k < h-1 and self.matrix[k][j+1] == 1 and self.nodes[k+1][j+1].upEdge:
+            self.nodes[k+1][j+1].upEdge.upNode = None
+            self.nodes[k+1][j+1].upEdge = None
+          if j-1 > 0 and j-1 < w-1 and k < h-1 and self.matrix[k][j-1] == 1 and self.nodes[k][j].downEdge:
+            self.nodes[k][j].downEdge.downNode = None
+            self.nodes[k][j].downEdge = None
 
   def addInputEdge(self):
     w, h = len(self.nodes[0]), len(self.nodes)
@@ -273,7 +338,6 @@ class Graph:
 
     while len(queue) != 0:
       x,y = queue[0]
-      print x,y
       queue = queue[1:]
       cur = self.nodes[x][y]
       if visit[x][y] == True:
@@ -319,13 +383,18 @@ class Graph:
     w, h = len(nodes[0]), len(nodes)
     for i in range(h):
       for j in range(w):
-        print '..',
-        print '--' if nodes[i][j].rightEdge and nodes[i][j].rightEdge.isHorizontal and j!=w-1 else '  ',
+        s = ''
+        s += '..'
+        s += '--' if nodes[i][j].rightEdge and nodes[i][j].rightEdge.isHorizontal and j!=w-1 else '  '
+        print s,
       print
       if i != h-1:
         for j in range(w):
-          print '|' if nodes[i][j].downEdge and nodes[i][j].downEdge.isVertical and j!=w-1 else ' ',
-          print ' ',
+          s = ''
+          s += '|' if nodes[i][j].downEdge and nodes[i][j].downEdge.isVertical and j!=w-1 else ' '
+          s += '|' if nodes[i+1][j].upEdge and nodes[i+1][j].upEdge.isVertical and j!=w-1 else ' '
+          s += '  '
+          print s,
       print
 
   def printQueueLen(self):
@@ -333,38 +402,42 @@ class Graph:
     w, h = len(nodes[0]), len(nodes)
     for i in range(h):
       for j in range(w):
-        print '..',
-        print nodes[i][j].rightEdge.rightQueueLen if nodes[i][j].rightEdge and j!=w-1 else '  ',
+        print (".......%5s"%(str(nodes[i][j].rightEdge.rightQueueLen) if nodes[i][j].rightEdge and j!=w-1 else '   ')),
       print
       if i != h-1:
         for j in range(w):
-          print nodes[i][j].downEdge.downQueueLen if nodes[i][j].downEdge and j!=w-1 else ' ',
-          print nodes[i+1][j].upEdge.upQueueLen if nodes[i+1][j].upEdge and j!=w-1 else ' ',
-          print ' ',
+          print ("%3s,%3s     "%(str(nodes[i][j].downEdge.downQueueLen) if nodes[i][j].downEdge and j!=w-1 else '   ', str(nodes[i+1][j].upEdge.upQueueLen) if nodes[i+1][j].upEdge and j!=w-1 else '   ')),
       print
-
+    print
   def printGraph(self):
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
     for i in range(h):
       for j in range(w):
-        print '..',
-        print '->' if nodes[i][j].rightEdge and j!=w-1 else '  ',
+        s = ''
+        s += '..'
+        s += '->' if nodes[i][j].rightEdge and j!=w-1 else '  '
+        print s,
       print
       if i != h-1:
         for j in range(w):
-          print '|' if nodes[i][j].downEdge and j!=w-1 else ' ',
-          print '^' if nodes[i+1][j].upEdge and j!=w-1 else ' ',
-          print ' ',
+          s = ''
+          s += '|' if nodes[i][j].downEdge and j!=w-1 else ' '
+          s += '^' if nodes[i+1][j].upEdge and j!=w-1 else ' '
+          s += '  '
+          print s,
         print
         for j in range(w):
-          print 'v' if nodes[i][j].downEdge and j!=w-1 else ' ',
-          print '|' if nodes[i+1][j].upEdge and j!=w-1 else ' ',
-          print ' ',
+          s = ''
+          s += 'v' if nodes[i][j].downEdge and j!=w-1 else ' '
+          s += '|' if nodes[i+1][j].upEdge and j!=w-1 else ' '
+          s += '  '
+          print s,
       print
 
   def flow(self, num, times):
-    self.outputCarCount = 0 # init
+    global outputCarCount, rejectCarCount, escapeCarCount# init
+    outputCarCount = rejectCarCount = escapeCarCount = 0
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
     T = times
@@ -374,27 +447,26 @@ class Graph:
       for j in range(w-1)[::-1]:
         for i in range(h):
           if self.nodes[i][j].rightEdge:
-            out = self.nodes[i][j].rightEdge.moveCar(int(self.nodes[i][j].rightEdge.speed))
-            if self.nodes[i][j].rightEdge.rightNode.isRightEnd:
-              self.outputCarCount += out
-          
+            self.nodes[i][j].rightEdge.moveCar(int(self.nodes[i][j].rightEdge.speed))
+      self.printQueueLen()
       # iterate from up to down, move car from down to up
       for i in range(1, h):
         for j in range(w):
           if self.nodes[i][j].upEdge:
             self.nodes[i][j].upEdge.moveCar(int(self.nodes[i][j].upEdge.speed), up = True) # TO MODIFY
-      
+      self.printQueueLen()
       # iterate from down to up, move car from up to down
       for i in range(h-1)[::-1]:
         for j in range(w):
           if self.nodes[i][j].downEdge:
             self.nodes[i][j].downEdge.moveCar(int(self.nodes[i][j].downEdge.speed), up = False) # TO MODIFY
-
+      self.printQueueLen()
       for i in range(len(self.inputEdges)):
         self.inputEdges[i].moveCar(num)
       self.printQueueLen()
-      print 'outputCarCount: ', self.outputCarCount
-
+      print 'outputCarCount: ', outputCarCount
+      print 'rejectCarCount: ', rejectCarCount
+      print 'escapeCarCount: ', escapeCarCount
 
 
 def getMatrix(h, w, init = -1):
@@ -419,23 +491,29 @@ if __name__ == '__main__':
   # m[2][0], m[2][1], m[2][2] = 1, 1, 0 
   # m[3][0], m[3][1], m[3][2] = 0, 1, 0 
 
-  m = getMatrix(3, 3)
-  m[0][0], m[0][1], m[0][2] = 1, 1, 1
-  m[1][0], m[1][1], m[1][2] = 0, 0, 1 
-  m[2][0], m[2][1], m[2][2] = 0, 1, 1 
+  # m = getMatrix(3, 3)
+  # m[0][0], m[0][1], m[0][2] = 1, 1, 1
+  # m[1][0], m[1][1], m[1][2] = 0, 0, 1 
+  # m[2][0], m[2][1], m[2][2] = 0, 1, 1 
+
+  m = getMatrix(5, 4)
+  m[0][0], m[0][1], m[0][2], m[0][3] = 1, 1, 1, 1
+  m[1][0], m[1][1], m[1][2], m[1][3] = 1, 1, 1, 1
+  m[2][0], m[2][1], m[2][2], m[2][3] = 0, 0, 1, 1
+  m[3][0], m[3][1], m[3][2], m[3][3] = 0, 0, 0, 0
+  m[4][0], m[4][1], m[4][2], m[4][3] = 0, 0, 0, 0
 
   # m = getMatrix(5, 4)
-  # m[0][0], m[0][1], m[0][2], m[0][3] = 1, 1, 1, 1
+  # m[0][0], m[0][1], m[0][2], m[0][3] = 1, 1, 0, 1
   # m[1][0], m[1][1], m[1][2], m[1][3] = 0, 0, 1, 1
   # m[2][0], m[2][1], m[2][2], m[2][3] = 1, 1, 1, 1
-  # m[3][0], m[3][1], m[3][2], m[3][3] = 1, 0, 1, 0
-  # m[4][0], m[4][1], m[4][2], m[4][3] = 1, 1, 0, 1
-
+  # m[3][0], m[3][1], m[3][2], m[3][3] = 1, 1, 1, 0
+  # m[4][0], m[4][1], m[4][2], m[4][3] = 1, 1, 1, 1
 
   g = Graph(m)
-  g.printGraph()
   g.printDis()
   g.printPr()
   g.printDirection()
-  g.flow(30, 20)
+  g.printGraph()
+  g.flow(20, 100)
 
