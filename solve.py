@@ -1,7 +1,10 @@
+from random import randint
 ### global var ###
 outputCarCount = 0
 rejectCarCount = 0
 escapeCarCount = 0
+roadSpeedRate  = 0
+beta = 1
 ##################
 
 class Node:
@@ -34,19 +37,19 @@ class Node:
         self.edgeCount += 1
     return self.edgeCount
   def calPr(self):
+    global beta
     if self.isRightEnd:
       return
     total = 0
     if self.upEdge != None and self.upEdge.upNode.dis != None:
-      self.upPr = 1.0 / self.upEdge.upNode.dis
+      self.upPr = float(self.getEdgeCount()) / self.upEdge.upNode.dis + beta*(self.upEdge.capability - self.upEdge.upQueueLen)
       total += self.upPr
     if self.downEdge != None and self.downEdge.downNode.dis != None:
-      self.downPr = 1.0 / self.downEdge.downNode.dis
+      self.downPr = float(self.getEdgeCount()) / self.downEdge.downNode.dis + beta*(self.downEdge.capability - self.downEdge.downQueueLen)
       total += self.downPr
     if self.rightEdge != None and self.rightEdge.rightNode.dis != None:
-      self.rightPr = 1.0 / (self.rightEdge.rightNode.dis + 1e-5)
+      self.rightPr = float(self.getEdgeCount()) / (self.rightEdge.rightNode.dis + 1e-5)  + beta*(self.rightEdge.capability - self.rightEdge.rightQueueLen)
       total += self.rightPr
-    
     if total == 0:
       return
 
@@ -71,8 +74,15 @@ class Edge:
     self.isHorizontal = False
     self.isVertical = False
     self.dis = 1 # default
-  def moveCar(self, num, up = False):
-    global outputCarCount, rejectCarCount, escapeCarCount
+
+  def reset(self):
+    self.upQueueLen = 0
+    self.downQueueLen = 0
+    self.rightQueueLen = 0
+
+  def moveCar(self, num, up = False, debug = None):
+    global outputCarCount, rejectCarCount, escapeCarCount, roadSpeedRate
+    roadSpeedRate = 0
     outLen = 0
     moveNode = None
     fromQueue = None
@@ -100,58 +110,67 @@ class Edge:
         outLen = num
         self.downQueueLen -= num
       moveNode = self.downNode
-    
-    if moveNode.isRightEnd:
-      outputCarCount += outLen
-    
+
+
     moveNode.calPr()
     leftover = outLen
     total = 0
     if self.isHorizontal:
-      if moveNode.upPr != None and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
-        moveNode.upEdge.upQueueLen += int(min(outLen * moveNode.upPr, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
-        leftover -= int(min(outLen * moveNode.upPr, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
-      if moveNode.downPr != None and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
-        moveNode.downEdge.downQueueLen += int(min(outLen * moveNode.downPr, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
-        leftover -= int(min(outLen * moveNode.downPr, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
-      if moveNode.rightPr != None and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
-        moveNode.rightEdge.rightQueueLen += int(min(outLen * moveNode.rightPr, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
-        leftover -= int(min(outLen * moveNode.rightPr, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+      if moveNode.upPr and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+        tmp = int(min(outLen * moveNode.upPr, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
+        moveNode.upEdge.upQueueLen += tmp
+        leftover -= tmp
+      if moveNode.downPr and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+        tmp = int(min(outLen * moveNode.downPr, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
+        moveNode.downEdge.downQueueLen += tmp
+        leftover -= tmp
+      if moveNode.rightPr and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        tmp = int(min(outLen * moveNode.rightPr, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+        moveNode.rightEdge.rightQueueLen += tmp
+        leftover -= tmp
     elif up == True:
-      total += moveNode.upPr if moveNode.upPr != None else 0
-      total += moveNode.rightPr if moveNode.rightPr != None else 0      
-      if moveNode.upPr != None and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
-        moveNode.upEdge.upQueueLen += int(min(outLen * moveNode.upPr / total, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
-        leftover -= int(min(outLen * moveNode.upPr / total, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
-      if moveNode.rightPr != None and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
-        moveNode.rightEdge.rightQueueLen += int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
-        leftover -= int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+      total += moveNode.upPr if moveNode.upPr else 0
+      total += moveNode.rightPr if moveNode.rightPr else 0   
+      if moveNode.upPr and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+        tmp = int(min(outLen * moveNode.upPr / total, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
+        moveNode.upEdge.upQueueLen += tmp
+        leftover -= tmp
+      if moveNode.rightPr and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        tmp = int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+        moveNode.rightEdge.rightQueueLen += tmp
+        leftover -= tmp
     else:
-      total += moveNode.downPr if moveNode.downPr != None else 0
-      total += moveNode.rightPr if moveNode.rightPr != None else 0 
-      if moveNode.downPr != None and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
-        moveNode.downEdge.downQueueLen += int(min(outLen * moveNode.downPr/ total, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
-        leftover -= int(min(outLen * moveNode.downPr/ total, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
-      if moveNode.rightPr != None and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
-        moveNode.rightEdge.rightQueueLen += int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
-        leftover -= int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
-
+      total += moveNode.downPr if moveNode.downPr else 0
+      total += moveNode.rightPr if moveNode.rightPr else 0 
+      if moveNode.downPr and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+        tmp = int(min(outLen * moveNode.downPr/ total, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen))
+        moveNode.downEdge.downQueueLen += tmp
+        leftover -= tmp
+        print moveNode.downEdge.downQueueLen
+      if moveNode.rightPr and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
+        tmp = int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
+        moveNode.rightEdge.rightQueueLen += tmp
+        leftover -= tmp
+      
+    if moveNode.isRightEnd:
+      outputCarCount += outLen
+      return 
 
     if leftover > 0: # TO MODIFY
       if moveNode.rightEdge and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
-        moveNode.rightEdge.rightQueueLen += min(leftover, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen)
-        leftover -= min(leftover, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen)
-      if moveNode.upEdge and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
-        moveNode.upEdge.upQueueLen += min(leftover, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen)
-        leftover -= min(leftover, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen)
-      if moveNode.downEdge and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
-        moveNode.downEdge.downQueueLen += min(leftover, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen)
-        leftover -= min(leftover, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen)
+        tmp = min(leftover, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen)
+        moveNode.rightEdge.rightQueueLen += tmp
+        leftover -= tmp
+      elif moveNode.upEdge and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+        tmp = min(leftover, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen)
+        moveNode.upEdge.upQueueLen += tmp
+        leftover -= tmp
+      elif moveNode.downEdge and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+        tmp = min(leftover, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen)
+        moveNode.downEdge.downQueueLen += tmp
+        leftover -= tmp
 
     if leftover > 0:
-      if moveNode.isRightEnd:
-        print 'moveNode.isRightEnd:', moveNode.isRightEnd, leftover
-        return
       if moveNode.isLeftEnd:
         print 'moveNode.isLeftEnd:', moveNode.isLeftEnd, leftover
         rejectCarCount += leftover
@@ -168,7 +187,10 @@ class Edge:
           self.upQueueLen += leftover
         else:
           self.downQueueLen += leftover
-        print 'moveNode.!!!', leftover
+    if outLen == 0:
+      roadSpeedRate = None
+    else:
+      roadSpeedRate = float(outLen - leftover) / outLen
 
 class Graph:
   def __init__(self, matrix):
@@ -300,18 +322,16 @@ class Graph:
           if j+1 < w-1 and k < h-1 and self.matrix[k][j+1] == 1 and self.nodes[k][j+1].downEdge:
             self.nodes[k][j+1].downEdge.downNode = None
             self.nodes[k][j+1].downEdge = None
-          if j-1 > 0 and j-1 < w-1 and k < h-1 and self.matrix[k][j-1] == 1 and self.nodes[k+1][j].upEdge:
+          if j-1 >= 0 and j-1 < w-1 and k < h-1 and self.matrix[k][j-1] == 1 and self.nodes[k+1][j].upEdge:
             self.nodes[k+1][j].upEdge.upNode = None
             self.nodes[k+1][j].upEdge = None
 
       if last != -1:
         for k in range(last+1,h):
-          if k == 4 and j == 2:
-            print k, j
           if j+1 < w-1 and k < h-1 and self.matrix[k][j+1] == 1 and self.nodes[k+1][j+1].upEdge:
             self.nodes[k+1][j+1].upEdge.upNode = None
             self.nodes[k+1][j+1].upEdge = None
-          if j-1 > 0 and j-1 < w-1 and k < h-1 and self.matrix[k][j-1] == 1 and self.nodes[k][j].downEdge:
+          if j-1 >= 0 and j-1 < w-1 and k < h-1 and self.matrix[k][j-1] == 1 and self.nodes[k][j].downEdge:
             self.nodes[k][j].downEdge.downNode = None
             self.nodes[k][j].downEdge = None
 
@@ -362,6 +382,13 @@ class Graph:
           self.nodes[x+1][y].dis = min(self.nodes[x+1][y].dis, cur.downEdge.dis + cur.dis)
         queue.append((x+1, y))
 
+  def reCalDis(self):
+    w, h = len(self.nodes[0]), len(self.nodes)
+    for i in range(h):
+      for j in range(w):
+        self.nodes[i][j].dis = None
+    self.calDis()
+
   def printDis(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     for i in range(h):
@@ -374,8 +401,8 @@ class Graph:
     for i in range(h):
       for j in range(w):
         self.nodes[i][j].calPr()
-        # print self.nodes[i][j].dis,
-        print '(', '^:' ,self.nodes[i][j].upPr, 'v:', self.nodes[i][j].downPr, '>:', self.nodes[i][j].rightPr, ')',
+        print ("(^:%3.2f v:%3.2f >:%3.2f)"%(self.nodes[i][j].upPr or 0.0, self.nodes[i][j].downPr or 0.0, self.nodes[i][j].rightPr or 0.0)),
+        # print '(', '^:' ,self.nodes[i][j].upPr, 'v:', self.nodes[i][j].downPr, '>:', self.nodes[i][j].rightPr, ')',
       print
 
   def printDirection(self):
@@ -398,17 +425,36 @@ class Graph:
       print
 
   def printQueueLen(self):
+    total = 0
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
     for i in range(h):
       for j in range(w):
+        total += nodes[i][j].rightEdge.rightQueueLen if nodes[i][j].rightEdge else 0
         print (".......%5s"%(str(nodes[i][j].rightEdge.rightQueueLen) if nodes[i][j].rightEdge and j!=w-1 else '   ')),
       print
       if i != h-1:
         for j in range(w):
+          total += nodes[i][j].downEdge.downQueueLen if nodes[i][j].downEdge else 0
+          total += nodes[i+1][j].upEdge.upQueueLen if nodes[i+1][j].upEdge else 0
           print ("%3s,%3s     "%(str(nodes[i][j].downEdge.downQueueLen) if nodes[i][j].downEdge and j!=w-1 else '   ', str(nodes[i+1][j].upEdge.upQueueLen) if nodes[i+1][j].upEdge and j!=w-1 else '   ')),
       print
-    print
+    print 'totalInGraph: ', total
+    return total
+  
+  def calGraphGapability(self):
+    total = 0
+    nodes = self.nodes
+    w, h = len(nodes[0]), len(nodes)
+    for i in range(h):
+      for j in range(w):
+        total += nodes[i][j].rightEdge.capability if nodes[i][j].rightEdge else 0
+      if i != h-1:
+        for j in range(w):
+          total += nodes[i][j].downEdge.capability if nodes[i][j].downEdge else 0
+          total += nodes[i+1][j].upEdge.capability if nodes[i+1][j].upEdge else 0
+    return total
+
   def printGraph(self):
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
@@ -434,13 +480,31 @@ class Graph:
           s += '  '
           print s,
       print
+  def reset(self):
+    nodes = self.nodes
+    w, h = len(nodes[0]), len(nodes)
+    for i in range(h):
+      for j in range(w):
+        if nodes[i][j].rightEdge:
+          nodes[i][j].rightEdge.reset()
+        if nodes[i][j].upEdge:
+          nodes[i][j].upEdge.reset()
+        if nodes[i][j].downEdge:
+          nodes[i][j].downEdge.reset()
 
-  def flow(self, num, times):
-    global outputCarCount, rejectCarCount, escapeCarCount# init
+  def flow(self, tup, times):
+    global outputCarCount, rejectCarCount, escapeCarCount, roadSpeedRate
+    self.reset()
+    totalInupt = 0
+    avgRoadSpeedRate = 0
+    avgRoadBusy = 0
+    moveTime = 0
     outputCarCount = rejectCarCount = escapeCarCount = 0
+    graphGapability = self.calGraphGapability()
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
     T = times
+    totalIn = 0
     while T != 0:
       T -= 1
       # iterate from right to left, move car from left to right
@@ -448,25 +512,98 @@ class Graph:
         for i in range(h):
           if self.nodes[i][j].rightEdge:
             self.nodes[i][j].rightEdge.moveCar(int(self.nodes[i][j].rightEdge.speed))
+            if roadSpeedRate != None:
+              avgRoadSpeedRate += roadSpeedRate
+              moveTime += 1
+      print 'move car from left to right'
       self.printQueueLen()
       # iterate from up to down, move car from down to up
       for i in range(1, h):
         for j in range(w):
           if self.nodes[i][j].upEdge:
-            self.nodes[i][j].upEdge.moveCar(int(self.nodes[i][j].upEdge.speed), up = True) # TO MODIFY
+            self.nodes[i][j].upEdge.moveCar(int(self.nodes[i][j].upEdge.speed), True) # TO MODIFY
+            if roadSpeedRate != None:
+              avgRoadSpeedRate += roadSpeedRate
+              moveTime += 1
+      print 'move car from down to up'
       self.printQueueLen()
       # iterate from down to up, move car from up to down
       for i in range(h-1)[::-1]:
         for j in range(w):
+          debug = None
           if self.nodes[i][j].downEdge:
-            self.nodes[i][j].downEdge.moveCar(int(self.nodes[i][j].downEdge.speed), up = False) # TO MODIFY
+            self.nodes[i][j].downEdge.moveCar(int(self.nodes[i][j].downEdge.speed), False, debug = debug) # TO MODIFY
+            if roadSpeedRate != None:
+              avgRoadSpeedRate += roadSpeedRate
+              moveTime += 1
+      print 'move car from up to down'
       self.printQueueLen()
       for i in range(len(self.inputEdges)):
+        num =  randint(tup[0], tup[1])
         self.inputEdges[i].moveCar(num)
-      self.printQueueLen()
-      print 'outputCarCount: ', outputCarCount
-      print 'rejectCarCount: ', rejectCarCount
-      print 'escapeCarCount: ', escapeCarCount
+        if roadSpeedRate != None:
+          avgRoadSpeedRate += roadSpeedRate
+          moveTime += 1
+        totalInupt += num
+      inGraph = self.printQueueLen()
+      avgRoadBusy += float(inGraph) / graphGapability
+      print 
+      self.printPr()
+    totalInGraph = self.printQueueLen()
+    avgRoadSpeedRate /= moveTime
+    avgRoadBusy /= times
+    print 'totalInput      :', totalInupt
+    print 'totalInGraph    :', totalInGraph
+    print 'outputCarCount  :', outputCarCount
+    print 'rejectCarCount  :', rejectCarCount
+    print 'escapeCarCount  :', escapeCarCount
+    print 'avgRoadSpeedRate:', avgRoadSpeedRate
+    print 'moveTime        :', moveTime
+    print 'avgRoadBusy     :', avgRoadBusy
+    print totalInupt, outputCarCount + rejectCarCount + escapeCarCount + totalInGraph
+    result = {}
+    result['totalInupt'] = totalInupt
+    result['totalInGraph'] = totalInGraph
+    result['outputCarCount'] = outputCarCount
+    result['escapeCarCount'] = escapeCarCount
+    result['rejectCarCount'] = rejectCarCount
+    result['avgRoadSpeedRate'] = avgRoadSpeedRate
+    result['avgRoadBusy'] = avgRoadBusy
+    result['moveTime'] = moveTime
+    return result
+
+def cont(g, cor1, dir, times = 1):
+  edge = Edge()
+  edge.speed = 20
+  edge.capability = 100
+  edge.dis = 2
+  n1 = g.nodes[cor1[0]][cor1[1]]
+  if dir == 'right':
+    n2 = g.nodes[cor1[0]][cor1[1]+1]
+    edge.isHorizontal = True
+    edge.leftNode = n1
+    edge.rightNode = n2
+    n1.rightEdge = edge
+    n2.leftEdge = edge
+    return (cor1[0], cor1[1]+1)
+  elif dir == 'up':
+    n2 = g.nodes[cor1[0]-1][cor1[1]]
+    edge.isVertical = True
+    edge.upNode = n2
+    edge.downNode = n1
+    n1.upEdge = edge
+    n2.downEdge = edge
+    return (cor1[0]-1, cor1[1])
+  elif dir == 'down':
+    n2 = g.nodes[cor1[0]+1][cor1[1]]
+    edge.isVertical = True
+    edge.downNode = n2
+    edge.upNode = n1
+    n1.downEdge = edge
+    n2.upEdge = edge
+    return (cor1[0]+1, cor1[1])
+
+
 
 
 def getMatrix(h, w, init = -1):
@@ -478,42 +615,237 @@ def getMatrix(h, w, init = -1):
   return result
 
 if __name__ == '__main__':
-  # m = getMatrix(5, 3)
+  ################################
+  # m = getMatrix(3, 3)
   # m[0][0], m[0][1], m[0][2] = 1, 1, 1
   # m[1][0], m[1][1], m[1][2] = 1, 1, 1
   # m[2][0], m[2][1], m[2][2] = 1, 1, 1 
-  # m[3][0], m[3][1], m[3][2] = 1, 1, 1 
-  # m[4][0], m[4][1], m[4][2] = 1, 1, 1 
+  # g = Graph(m)
+  # beg = (1,0)
+  # nex = cont(g, beg, 'right')
+  # nex = cont(g, nex, 'right')
+  # nex = cont(g, nex, 'right')
+  # beg = (1,0)
+  # nex = cont(g, beg, 'right')
+  # nex = cont(g, nex, 'down')
+  # nex = cont(g, nex, 'right')
+  # nex = cont(g, nex, 'down')
+  # g.reCalDis()
+  ################################
 
-  # m = getMatrix(4, 3)
-  # m[0][0], m[0][1], m[0][2] = 0, 1, 0
-  # m[1][0], m[1][1], m[1][2] = 1, 1, 1 
-  # m[2][0], m[2][1], m[2][2] = 1, 1, 0 
-  # m[3][0], m[3][1], m[3][2] = 0, 1, 0 
 
   # m = getMatrix(3, 3)
   # m[0][0], m[0][1], m[0][2] = 1, 1, 1
   # m[1][0], m[1][1], m[1][2] = 0, 0, 1 
   # m[2][0], m[2][1], m[2][2] = 0, 1, 1 
 
-  m = getMatrix(5, 4)
-  m[0][0], m[0][1], m[0][2], m[0][3] = 1, 1, 1, 1
-  m[1][0], m[1][1], m[1][2], m[1][3] = 1, 1, 1, 1
-  m[2][0], m[2][1], m[2][2], m[2][3] = 0, 0, 1, 1
-  m[3][0], m[3][1], m[3][2], m[3][3] = 0, 0, 0, 0
-  m[4][0], m[4][1], m[4][2], m[4][3] = 0, 0, 0, 0
-
   # m = getMatrix(5, 4)
-  # m[0][0], m[0][1], m[0][2], m[0][3] = 1, 1, 0, 1
-  # m[1][0], m[1][1], m[1][2], m[1][3] = 0, 0, 1, 1
-  # m[2][0], m[2][1], m[2][2], m[2][3] = 1, 1, 1, 1
-  # m[3][0], m[3][1], m[3][2], m[3][3] = 1, 1, 1, 0
-  # m[4][0], m[4][1], m[4][2], m[4][3] = 1, 1, 1, 1
+  # m[0][0], m[0][1], m[0][2], m[0][3] = 0, 1, 1, 0
+  # m[1][0], m[1][1], m[1][2], m[1][3] = 0, 0, 1, 0
+  # m[2][0], m[2][1], m[2][2], m[2][3] = 0, 0, 1, 0
+  # m[3][0], m[3][1], m[3][2], m[3][3] = 0, 0, 1, 0
+  # m[4][0], m[4][1], m[4][2], m[4][3] = 0, 0, 0, 0
+  # g = Graph(m)
 
+  m = getMatrix(8, 5)
+  m[0][0], m[0][1], m[0][2], m[0][3], m[0][4] = 1, 1, 1, 1, 1
+  m[1][0], m[1][1], m[1][2], m[1][3], m[1][4] = 1, 1, 1, 1, 1
+  m[2][0], m[2][1], m[2][2], m[2][3], m[2][4] = 0, 0, 0, 1, 1
+  m[3][0], m[3][1], m[3][2], m[3][3], m[3][4] = 0, 0, 0, 1, 1
+  m[4][0], m[4][1], m[4][2], m[4][3], m[4][4] = 0, 0, 0, 1, 1
+  m[5][0], m[5][1], m[5][2], m[5][3], m[5][4] = 0, 0, 0, 1, 1
+  m[6][0], m[6][1], m[6][2], m[6][3], m[6][4] = 0, 0, 0, 1, 1
+  m[7][0], m[7][1], m[7][2], m[7][3], m[7][4] = 0, 0, 0, 1, 1
   g = Graph(m)
+  # beg = (4,3)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+
+  # beg = (5,3)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+
+  # beg = (6,3)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+
+  # m = getMatrix(8, 5)
+  # m[0][0], m[0][1], m[0][2], m[0][3], m[0][4] = 1, 1, 1, 1, 1
+  # m[1][0], m[1][1], m[1][2], m[1][3], m[1][4] = 1, 1, 1, 1, 1
+  # m[2][0], m[2][1], m[2][2], m[2][3], m[2][4] = 1, 1, 1, 1, 1
+  # m[3][0], m[3][1], m[3][2], m[3][3], m[3][4] = 1, 1, 1, 1, 1
+  # m[4][0], m[4][1], m[4][2], m[4][3], m[4][4] = 1, 1, 1, 1, 1
+  # m[5][0], m[5][1], m[5][2], m[5][3], m[5][4] = 1, 1, 1, 1, 1
+  # m[6][0], m[6][1], m[6][2], m[6][3], m[6][4] = 1, 1, 1, 1, 1
+  # m[7][0], m[7][1], m[7][2], m[7][3], m[7][4] = 1, 1, 1, 1, 1
+  # g = Graph(m)
+  # beg = (4,0)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # beg = (5,0)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # beg = (6,0)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+
+  # beg = (4,0)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # g.reCalDis()
+  # g.nodes[4][2].upEdge = None
+  # g.nodes[5][2].upEdge = None
+  # g.nodes[6][2].upEdge = None
+  # g.nodes[7][2].upEdge = None
+  # g.nodes[8][2].upEdge = None
+
+
+  # beg = (0,2)
+  # nxt = cont(g, beg, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+
+  # beg = (0,4)
+  # nxt = cont(g, beg, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+  # nxt = cont(g, nxt, 'down')
+
+  # beg = (4,0)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+
+  # beg = (6,0)
+  # nxt = cont(g, beg, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+  # nxt = cont(g, nxt, 'right')
+
+  # g.reCalDis()
+  # g.nodes[0][2].upEdge = None
+  # g.nodes[1][2].upEdge = None
+  # g.nodes[2][2].upEdge = None
+  # g.nodes[3][2].upEdge = None
+  # g.nodes[4][2].upEdge = None
+  # g.nodes[5][2].upEdge = None
+  # g.nodes[6][2].upEdge = None
+  # g.nodes[7][2].upEdge = None
+  # g.nodes[8][2].upEdge = None
+
   g.printDis()
   g.printPr()
   g.printDirection()
+  # g.flow((20,30), 100)
   g.printGraph()
-  g.flow(20, 100)
+
+#####################################################################
+  avg = {}
+  que = {}
+  avg['totalInupt'] = 0
+  avg['totalInGraph'] = 0
+  avg['outputCarCount'] = 0
+  avg['escapeCarCount'] = 0
+  avg['rejectCarCount'] = 0
+  avg['avgRoadSpeedRate'] = 0
+  avg['avgRoadBusy'] = 0
+  avg['moveTime'] = 0
+
+  que['totalInupt'] = []
+  que['totalInGraph'] = []
+  que['outputCarCount'] = []
+  que['escapeCarCount'] = []
+  que['rejectCarCount'] = []
+  que['avgRoadSpeedRate'] = []
+  que['avgRoadBusy'] = []
+  que['moveTime'] = []
+  start = 20
+  end = 20
+  time = 50
+  rang = 0
+  for i in range(1, rang):
+    result = g.flow((i,i), time)
+    avg['totalInupt'] += result['totalInupt']
+    avg['totalInGraph'] += result['totalInGraph']
+    avg['outputCarCount'] += result['outputCarCount']
+    avg['escapeCarCount'] += result['escapeCarCount']
+    avg['rejectCarCount'] += result['rejectCarCount']
+    avg['avgRoadSpeedRate'] += result['avgRoadSpeedRate']
+    avg['avgRoadBusy'] += result['avgRoadBusy']
+    avg['moveTime'] += result['moveTime']
+    que['totalInupt'].append(result['totalInupt'])
+    que['totalInGraph'].append(result['totalInGraph'])
+    que['outputCarCount'].append(result['outputCarCount'])
+    que['escapeCarCount'].append(result['escapeCarCount'])
+    que['rejectCarCount'].append(result['rejectCarCount'])
+    que['avgRoadSpeedRate'].append(result['avgRoadSpeedRate'])
+    que['avgRoadBusy'].append(result['avgRoadBusy'])
+    que['moveTime'].append(result['moveTime'])
+
+  avg['totalInupt'] /= float(rang)
+  avg['totalInGraph'] /= float(rang)
+  avg['outputCarCount'] /= float(rang)
+  avg['escapeCarCount'] /= float(rang)
+  avg['rejectCarCount'] /= float(rang)
+  avg['avgRoadSpeedRate'] /= float(rang)
+  avg['avgRoadBusy'] /= float(rang)
+  avg['moveTime'] /= float(rang)
+  print 
+  print 'avg.totalInupt:', avg['totalInupt']
+  print 'avg.totalInGraph:', avg['totalInGraph']
+  print 'avg.outputCarCount:', avg['outputCarCount']
+  print 'avg.escapeCarCount:', avg['escapeCarCount']
+  print 'avg.rejectCarCount:', avg['rejectCarCount']
+  print 'avg.avgRoadSpeedRate:', avg['avgRoadSpeedRate']
+  print 'avg.avgRoadBusy:', avg['avgRoadBusy']
+  # print 'avg.moveTime:', avg['moveTime']
+  
+  print 'que.totalInupt:', que['totalInupt']
+  print 'que.totalInGraph:', que['totalInGraph']
+  print 'que.outputCarCount:', que['outputCarCount']
+  print 'que.escapeCarCount:', que['escapeCarCount']
+  print 'que.rejectCarCount:', que['rejectCarCount']
+  print 'que.avgRoadSpeedRate:', que['avgRoadSpeedRate']
+  print 'que.avgRoadBusy:', que['avgRoadBusy']
+  # print 'que.moveTime:', que['moveTime']
+#####################################################################
+
+  g.printGraph()
+#========================================================================================
+  # global beta
+  # beta = 100
+  # y = []
+  # x = []
+  # for i in range(1,20):
+  #   result = g.flow((i, i), 20) # 10, 20,.. 200
+  #   y.append(result['avgRoadBusy'] * 30)
+  #   x.append(result['avgRoadSpeedRate']* 30)
+  # print 'y = ', y
+  # print 
+  # print 'x = ', x
 
