@@ -1,31 +1,36 @@
+# -*- coding: utf-8 -*-
 from random import randint
-### global var ###
-outputCarCount = 0
-rejectCarCount = 0
-escapeCarCount = 0
-roadSpeedRate  = 0
-beta = 1
-##################
+### 全局变量 ###################
+outputCarCount = 0 # 流出量
+rejectCarCount = 0 # 绕行量
+escapeCarCount = 0 # 溢出量
+roadSpeedRate  = 0 # 通行速度
+beta           = 1 # 概率动态因数
+###############################
 
+#
+# 道路节点类
+#
 class Node:
   def __init__(self):
-    self.upEdge = None
-    self.downEdge = None
-    self.rightEdge = None
-    self.leftEdge = None
-    self.edgeCount = None
-    self.upDis = 0
-    self.downDis = 0
-    self.rightDis = 0
-    self.upPr = None
-    self.downPr = None
-    self.rightPr = None
-    self.isRightEnd = False
-    self.isLeftEnd = False
-    self.isUpEnd = False
-    self.isDownEnd = False
-    self.dis = None
-
+    self.upEdge = None      # 上边
+    self.downEdge = None    # 下边
+    self.rightEdge = None   # 右边
+    self.leftEdge = None    # 左边
+    self.edgeCount = None   # 度数
+    self.upDis = 0          # 走上方到达目的最近距离
+    self.downDis = 0        # 走下方到达目的最近距离
+    self.rightDis = 0       # 走右方到达目的最近距离
+    self.upPr = None        # 走上方的概率
+    self.downPr = None      # 走下方的概率
+    self.rightPr = None     # 走右方的概率
+    self.isRightEnd = False # 是否是右边节点
+    self.isLeftEnd = False  # 是否是左边节点
+    self.isUpEnd = False    # 是否是上方节点
+    self.isDownEnd = False  # 是否是下方节点
+    self.dis = None         # 该点到达目的的距离
+  
+  # 获取节点度数
   def getEdgeCount(self):
     if self.edgeCount == None:
       self.edgeCount = 0
@@ -36,23 +41,29 @@ class Node:
       if self.rightEdge != None:
         self.edgeCount += 1
     return self.edgeCount
+
+  # 计算节点到各方向的概率
   def calPr(self):
     global beta
     if self.isRightEnd:
       return
     total = 0
     if self.upEdge != None and self.upEdge.upNode.dis != None:
+      # 走上方概率 = 上方节点分叉路口数 / 上方节点到目的的最短距离 + beta * 上边剩余容量
       self.upPr = float(self.getEdgeCount()) / self.upEdge.upNode.dis + beta*(self.upEdge.capability - self.upEdge.upQueueLen)
       total += self.upPr
     if self.downEdge != None and self.downEdge.downNode.dis != None:
+      # 走下方概率 = 下方节点分叉路口数 / 下方节点到目的的最短距离 + beta * 下边剩余容量
       self.downPr = float(self.getEdgeCount()) / self.downEdge.downNode.dis + beta*(self.downEdge.capability - self.downEdge.downQueueLen)
       total += self.downPr
     if self.rightEdge != None and self.rightEdge.rightNode.dis != None:
+      # 走右方概率 = 右方节点分叉路口数 / 右方节点到目的的最短距离 + beta * 右边剩余容量
       self.rightPr = float(self.getEdgeCount()) / (self.rightEdge.rightNode.dis + 1e-5)  + beta*(self.rightEdge.capability - self.rightEdge.rightQueueLen)
       total += self.rightPr
     if total == 0:
       return
 
+    # 概率归一化
     if self.upEdge != None and self.upEdge.upNode.dis != None:
       self.upPr /= total
     if self.downEdge != None and self.downEdge.downNode.dis != None:
@@ -60,33 +71,39 @@ class Node:
     if self.rightEdge != None and self.rightEdge.rightNode.dis != None:
       self.rightPr /= total
 
+#
+# 道路类
+#
 class Edge:
   def __init__(self):
-    self.capability = 100
-    self.upQueueLen = 0
-    self.downQueueLen = 0
-    self.rightQueueLen = 0
-    self.upNode = None
-    self.downNode = None
-    self.rightNode = None
-    self.leftNode = None
-    self.speed = 20 # default
-    self.isHorizontal = False
-    self.isVertical = False
-    self.dis = 1 # default
+    self.capability = 100     # 道路容量
+    self.upQueueLen = 0       # 上边实际车量
+    self.downQueueLen = 0     # 下边实际车量
+    self.rightQueueLen = 0    # 右边实际车量
+    self.upNode = None        # 上方节点
+    self.downNode = None      # 下方节点
+    self.rightNode = None     # 右方节点
+    self.leftNode = None      # 左方节点
+    self.speed = 20 # default # 边通行速度
+    self.isHorizontal = False # 是否是水平边
+    self.isVertical = False   # 是否是垂直边
+    self.dis = 1 # default    # 边的距离
 
+  # 重置边的实际车量
   def reset(self):
     self.upQueueLen = 0
     self.downQueueLen = 0
     self.rightQueueLen = 0
 
+  # 移动边上的车辆
   def moveCar(self, num, up = False, debug = None):
     global outputCarCount, rejectCarCount, escapeCarCount, roadSpeedRate
     roadSpeedRate = 0
     outLen = 0
     moveNode = None
     fromQueue = None
-    if self.isHorizontal:
+    # 确定该边的流出量和流出节点
+    if self.isHorizontal: # 该边是水平边，往右走
       if self.rightQueueLen < num:
         outLen = self.rightQueueLen
         self.rightQueueLen = 0
@@ -94,7 +111,7 @@ class Edge:
         outLen = num
         self.rightQueueLen -= num
       moveNode = self.rightNode
-    elif up:
+    elif up: # 该边是垂直边，往上走
       if self.upQueueLen < num:
         outLen = self.upQueueLen
         self.upQueueLen = 0
@@ -102,7 +119,7 @@ class Edge:
         outLen = num
         self.upQueueLen -= num
       moveNode = self.upNode
-    else:
+    else: # 该边是垂直边，往下走
       if self.downQueueLen < num:
         outLen = self.downQueueLen
         self.downQueueLen = 0
@@ -112,9 +129,11 @@ class Edge:
       moveNode = self.downNode
 
 
-    moveNode.calPr()
+    moveNode.calPr() # 重新计算节点的各方向概率，因为概率包含了动态的部分
     leftover = outLen
     total = 0
+
+    # 按照概率分配待移动车辆到其他道路
     if self.isHorizontal:
       if moveNode.upPr and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
         tmp = int(min(outLen * moveNode.upPr, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen))
@@ -151,25 +170,28 @@ class Edge:
         tmp = int(min(outLen * moveNode.rightPr/ total, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen))
         moveNode.rightEdge.rightQueueLen += tmp
         leftover -= tmp
-      
+    
+    # 如果当前道路通往的节点是目的节点，那么累计流出量
     if moveNode.isRightEnd:
       outputCarCount += outLen
       return 
 
-    if leftover > 0: # TO MODIFY
+    # 如果某一目标道路可容纳量已经达到最大值，则车流流往其它道路
+    if leftover > 0:
       if moveNode.rightEdge and moveNode.rightEdge.rightQueueLen < moveNode.rightEdge.capability:
         tmp = min(leftover, moveNode.rightEdge.capability - moveNode.rightEdge.rightQueueLen)
         moveNode.rightEdge.rightQueueLen += tmp
         leftover -= tmp
-      elif moveNode.upEdge and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
+      if moveNode.upEdge and moveNode.upEdge.upQueueLen < moveNode.upEdge.capability:
         tmp = min(leftover, moveNode.upEdge.capability - moveNode.upEdge.upQueueLen)
         moveNode.upEdge.upQueueLen += tmp
         leftover -= tmp
-      elif moveNode.downEdge and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
+      if moveNode.downEdge and moveNode.downEdge.downQueueLen < moveNode.downEdge.capability:
         tmp = min(leftover, moveNode.downEdge.capability - moveNode.downEdge.downQueueLen)
         moveNode.downEdge.downQueueLen += tmp
         leftover -= tmp
 
+    # 如果当前道路的 实际流通量 < 理想流通量 ,则将多余的部分滞留
     if leftover > 0:
       if moveNode.isLeftEnd:
         print 'moveNode.isLeftEnd:', moveNode.isLeftEnd, leftover
@@ -187,11 +209,16 @@ class Edge:
           self.upQueueLen += leftover
         else:
           self.downQueueLen += leftover
+    # 统计平均流量指数
     if outLen == 0:
       roadSpeedRate = None
     else:
       roadSpeedRate = float(outLen - leftover) / outLen
 
+
+#
+# 网格图类
+#
 class Graph:
   def __init__(self, matrix):
     self.matrix = matrix
@@ -199,6 +226,8 @@ class Graph:
     self.nodes = None
     self.inputEdges = None
     self.construct()
+
+  # 根据输入矩阵来构建整个网格图
   def construct(self):
     self._construct(self.matrix)
     self.removeImpossibleEdge()
@@ -278,6 +307,7 @@ class Graph:
 
     self.nodes = nodes
 
+  # 去除不可能的边: 例如司机不会进入死胡同
   def removeImpossibleEdge(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     fixMatrix = getMatrix(h-1, w-1)
@@ -335,6 +365,7 @@ class Graph:
             self.nodes[k][j].downEdge.downNode = None
             self.nodes[k][j].downEdge = None
 
+  # 添加输入的边
   def addInputEdge(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     inputEdges = []
@@ -348,6 +379,7 @@ class Graph:
 
     self.inputEdges = inputEdges
 
+  # 计算距离
   def calDis(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     visit = getMatrix(h, w, False)
@@ -382,6 +414,7 @@ class Graph:
           self.nodes[x+1][y].dis = min(self.nodes[x+1][y].dis, cur.downEdge.dis + cur.dis)
         queue.append((x+1, y))
 
+  # 重新计算距离
   def reCalDis(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     for i in range(h):
@@ -389,6 +422,7 @@ class Graph:
         self.nodes[i][j].dis = None
     self.calDis()
 
+  # 打印距离矩阵
   def printDis(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     for i in range(h):
@@ -396,6 +430,7 @@ class Graph:
         print self.nodes[i][j].dis,
       print
   
+  # 打印概率矩阵
   def printPr(self):
     w, h = len(self.nodes[0]), len(self.nodes)
     for i in range(h):
@@ -405,6 +440,7 @@ class Graph:
         # print '(', '^:' ,self.nodes[i][j].upPr, 'v:', self.nodes[i][j].downPr, '>:', self.nodes[i][j].rightPr, ')',
       print
 
+  # 打印方向矩阵
   def printDirection(self):
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
@@ -424,6 +460,7 @@ class Graph:
           print s,
       print
 
+  # 打印当前的路网的滞留量
   def printQueueLen(self):
     total = 0
     nodes = self.nodes
@@ -442,6 +479,7 @@ class Graph:
     print 'totalInGraph: ', total
     return total
   
+  # 计算整个方格网络的容纳量
   def calGraphGapability(self):
     total = 0
     nodes = self.nodes
@@ -455,6 +493,7 @@ class Graph:
           total += nodes[i+1][j].upEdge.capability if nodes[i+1][j].upEdge else 0
     return total
 
+  # 打印方格网络图
   def printGraph(self):
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
@@ -480,6 +519,8 @@ class Graph:
           s += '  '
           print s,
       print
+
+  # 重置所有边
   def reset(self):
     nodes = self.nodes
     w, h = len(nodes[0]), len(nodes)
@@ -491,7 +532,8 @@ class Graph:
           nodes[i][j].upEdge.reset()
         if nodes[i][j].downEdge:
           nodes[i][j].downEdge.reset()
-
+  
+  # 迭代流动
   def flow(self, tup, times):
     global outputCarCount, rejectCarCount, escapeCarCount, roadSpeedRate
     self.reset()
@@ -507,7 +549,7 @@ class Graph:
     totalIn = 0
     while T != 0:
       T -= 1
-      # iterate from right to left, move car from left to right
+      # 从右到左迭代,车从左到右流动
       for j in range(w-1)[::-1]:
         for i in range(h):
           if self.nodes[i][j].rightEdge:
@@ -515,19 +557,21 @@ class Graph:
             if roadSpeedRate != None:
               avgRoadSpeedRate += roadSpeedRate
               moveTime += 1
-      print 'move car from left to right'
-      self.printQueueLen()
-      # iterate from up to down, move car from down to up
+      # print 'move car from left to right'
+      # self.printQueueLen()
+
+      # 从上到下迭代,车从下到上流动
       for i in range(1, h):
         for j in range(w):
           if self.nodes[i][j].upEdge:
-            self.nodes[i][j].upEdge.moveCar(int(self.nodes[i][j].upEdge.speed), True) # TO MODIFY
+            self.nodes[i][j].upEdge.moveCar(int(self.nodes[i][j].upEdge.speed), True)
             if roadSpeedRate != None:
               avgRoadSpeedRate += roadSpeedRate
               moveTime += 1
-      print 'move car from down to up'
-      self.printQueueLen()
-      # iterate from down to up, move car from up to down
+      # print 'move car from down to up'
+      # self.printQueueLen()
+
+      # 从下到上迭代,车从上到下流动
       for i in range(h-1)[::-1]:
         for j in range(w):
           debug = None
@@ -536,8 +580,10 @@ class Graph:
             if roadSpeedRate != None:
               avgRoadSpeedRate += roadSpeedRate
               moveTime += 1
-      print 'move car from up to down'
-      self.printQueueLen()
+      # print 'move car from up to down'
+      # self.printQueueLen()
+
+      # 模拟流入量
       for i in range(len(self.inputEdges)):
         num =  randint(tup[0], tup[1])
         self.inputEdges[i].moveCar(num)
@@ -572,6 +618,7 @@ class Graph:
     result['moveTime'] = moveTime
     return result
 
+# 打通道路所使用的方法
 def cont(g, cor1, dir, times = 1):
   edge = Edge()
   edge.speed = 20
@@ -605,7 +652,7 @@ def cont(g, cor1, dir, times = 1):
 
 
 
-
+# 构建矩阵
 def getMatrix(h, w, init = -1):
   result = []
   for x in range(0, h):
@@ -615,38 +662,7 @@ def getMatrix(h, w, init = -1):
   return result
 
 if __name__ == '__main__':
-  ################################
-  # m = getMatrix(3, 3)
-  # m[0][0], m[0][1], m[0][2] = 1, 1, 1
-  # m[1][0], m[1][1], m[1][2] = 1, 1, 1
-  # m[2][0], m[2][1], m[2][2] = 1, 1, 1 
-  # g = Graph(m)
-  # beg = (1,0)
-  # nex = cont(g, beg, 'right')
-  # nex = cont(g, nex, 'right')
-  # nex = cont(g, nex, 'right')
-  # beg = (1,0)
-  # nex = cont(g, beg, 'right')
-  # nex = cont(g, nex, 'down')
-  # nex = cont(g, nex, 'right')
-  # nex = cont(g, nex, 'down')
-  # g.reCalDis()
-  ################################
-
-
-  # m = getMatrix(3, 3)
-  # m[0][0], m[0][1], m[0][2] = 1, 1, 1
-  # m[1][0], m[1][1], m[1][2] = 0, 0, 1 
-  # m[2][0], m[2][1], m[2][2] = 0, 1, 1 
-
-  # m = getMatrix(5, 4)
-  # m[0][0], m[0][1], m[0][2], m[0][3] = 0, 1, 1, 0
-  # m[1][0], m[1][1], m[1][2], m[1][3] = 0, 0, 1, 0
-  # m[2][0], m[2][1], m[2][2], m[2][3] = 0, 0, 1, 0
-  # m[3][0], m[3][1], m[3][2], m[3][3] = 0, 0, 1, 0
-  # m[4][0], m[4][1], m[4][2], m[4][3] = 0, 0, 0, 0
-  # g = Graph(m)
-
+  ####################  L型小区   #############################
   m = getMatrix(8, 5)
   m[0][0], m[0][1], m[0][2], m[0][3], m[0][4] = 1, 1, 1, 1, 1
   m[1][0], m[1][1], m[1][2], m[1][3], m[1][4] = 1, 1, 1, 1, 1
@@ -657,6 +673,9 @@ if __name__ == '__main__':
   m[6][0], m[6][1], m[6][2], m[6][3], m[6][4] = 0, 0, 0, 1, 1
   m[7][0], m[7][1], m[7][2], m[7][3], m[7][4] = 0, 0, 0, 1, 1
   g = Graph(m)
+
+  # ========= 打通道路 ==========
+  # ---------- 横穿 ------------
   # beg = (4,3)
   # nxt = cont(g, beg, 'right')
   # nxt = cont(g, nxt, 'right')
@@ -669,6 +688,13 @@ if __name__ == '__main__':
   # nxt = cont(g, beg, 'right')
   # nxt = cont(g, nxt, 'right')
 
+  # g.reCalDis()
+  # ----------------------------
+  # ============================
+
+  ################### L型小区 ##################################
+
+  ################### 方型小区 ##################################
   # m = getMatrix(8, 5)
   # m[0][0], m[0][1], m[0][2], m[0][3], m[0][4] = 1, 1, 1, 1, 1
   # m[1][0], m[1][1], m[1][2], m[1][3], m[1][4] = 1, 1, 1, 1, 1
@@ -679,6 +705,10 @@ if __name__ == '__main__':
   # m[6][0], m[6][1], m[6][2], m[6][3], m[6][4] = 1, 1, 1, 1, 1
   # m[7][0], m[7][1], m[7][2], m[7][3], m[7][4] = 1, 1, 1, 1, 1
   # g = Graph(m)
+  
+  # ========= 打通道路 ==========
+
+  # ---------- 横穿 ------------
   # beg = (4,0)
   # nxt = cont(g, beg, 'right')
   # nxt = cont(g, nxt, 'right')
@@ -697,7 +727,9 @@ if __name__ == '__main__':
   # nxt = cont(g, nxt, 'right')
   # nxt = cont(g, nxt, 'right')
   # nxt = cont(g, nxt, 'right')
+  # ----------------------------
 
+  # ---------- 折线 ------------
   # beg = (4,0)
   # nxt = cont(g, beg, 'right')
   # nxt = cont(g, nxt, 'right')
@@ -711,8 +743,9 @@ if __name__ == '__main__':
   # g.nodes[6][2].upEdge = None
   # g.nodes[7][2].upEdge = None
   # g.nodes[8][2].upEdge = None
+  # ----------------------------
 
-
+  # ---------- 十字 ------------
   # beg = (0,2)
   # nxt = cont(g, beg, 'down')
   # nxt = cont(g, nxt, 'down')
@@ -757,14 +790,18 @@ if __name__ == '__main__':
   # g.nodes[6][2].upEdge = None
   # g.nodes[7][2].upEdge = None
   # g.nodes[8][2].upEdge = None
+  # ---------------------------
+  ################### 方型小区 ##################################
 
-  g.printDis()
-  g.printPr()
-  g.printDirection()
-  # g.flow((20,30), 100)
-  g.printGraph()
 
-#####################################################################
+  # ----打印相关矩阵-------
+  # g.printDis()
+  # g.printPr()
+  # g.printDirection()
+  # g.printGraph()
+  # ---------------------
+
+  ################## 流通迭代得出指标和相关数据 #######################################
   avg = {}
   que = {}
   avg['totalInupt'] = 0
@@ -787,7 +824,7 @@ if __name__ == '__main__':
   start = 20
   end = 20
   time = 50
-  rang = 0
+  rang = 20
   for i in range(1, rang):
     result = g.flow((i,i), time)
     avg['totalInupt'] += result['totalInupt']
@@ -823,7 +860,6 @@ if __name__ == '__main__':
   print 'avg.rejectCarCount:', avg['rejectCarCount']
   print 'avg.avgRoadSpeedRate:', avg['avgRoadSpeedRate']
   print 'avg.avgRoadBusy:', avg['avgRoadBusy']
-  # print 'avg.moveTime:', avg['moveTime']
   
   print 'que.totalInupt:', que['totalInupt']
   print 'que.totalInGraph:', que['totalInGraph']
@@ -832,20 +868,5 @@ if __name__ == '__main__':
   print 'que.rejectCarCount:', que['rejectCarCount']
   print 'que.avgRoadSpeedRate:', que['avgRoadSpeedRate']
   print 'que.avgRoadBusy:', que['avgRoadBusy']
-  # print 'que.moveTime:', que['moveTime']
-#####################################################################
-
-  g.printGraph()
-#========================================================================================
-  # global beta
-  # beta = 100
-  # y = []
-  # x = []
-  # for i in range(1,20):
-  #   result = g.flow((i, i), 20) # 10, 20,.. 200
-  #   y.append(result['avgRoadBusy'] * 30)
-  #   x.append(result['avgRoadSpeedRate']* 30)
-  # print 'y = ', y
-  # print 
-  # print 'x = ', x
+  ################## 流通迭代得出指标和相关数据 #######################################
 
